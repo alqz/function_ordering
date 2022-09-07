@@ -42,18 +42,8 @@ class Parser:
 
 
 class PythonParser(Parser):
-    @staticmethod
-    def _get_all_identifer_chars():
-        abc = "abcdefghijklmnopqrstuvwxyz"
-        digits = "0123456789"
-        s = set()
-        s.update(abc)
-        s.update(abc.upper())
-        s.update(digits)
-        s.add("_")
-        return s
 
-    all_identifier_chars = _get_all_identifer_chars.__func__()
+    _all_identifier_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_')
 
     @staticmethod
     def _get_name_if_def(s):
@@ -102,13 +92,13 @@ class PythonParser(Parser):
         i = line.find(function_name)
         if i == -1:
             return False
-        if line[i - 1] in PythonParser.all_identifier_chars:
+        if line[i - 1] in PythonParser._all_identifier_chars:
             return False
         after_index = i + len(function_name)
         if len(line) == after_index:
             return True
         assert len(line) > after_index
-        if line[after_index] in PythonParser.all_identifier_chars:
+        if line[after_index] in PythonParser._all_identifier_chars:
             return False
         return True
 
@@ -151,6 +141,23 @@ class Graph:
                     invalidated.add(child)
         return set(g.keys()) - invalidated
 
+    @staticmethod
+    def visualize(g):
+        import networkx as nx
+        import matplotlib.pyplot as pyplot
+        nxg = nx.DiGraph()
+        for n in g:
+            for child in g[n]:
+                nxg.add_edge(n, child)
+        nx.draw_kamada_kawai(nxg,
+            with_labels=True,
+            arrows=True,
+            edge_color="gray",
+            node_size=300,
+            font_size=10
+        )
+        pyplot.show()
+
 
 USE_PARSER = PythonParser
 
@@ -170,11 +177,11 @@ def mod_lines_between_markers(lines, mod):
     return lines[:start] + mod(lines[start:end]) + lines[end:]
 
 
-def partition_by_function(lines, partition_finder):
+def partition_by_function(lines):
     partitions = []
     c = 0
     while True:
-        next_partition = partition_finder(lines, c)
+        next_partition = USE_PARSER.find_next_function(lines, c)
         if next_partition is None:
             break
         i, function_name, n = next_partition
@@ -223,8 +230,9 @@ def reorder_lines(lines, partitions, ordered_function_names):
 
 
 def reorder_lines_by_function_calls(lines, reverse):
-    partitions = partition_by_function(lines, USE_PARSER.find_next_function)
+    partitions = partition_by_function(lines)
     m = get_call_mapping(lines, partitions)
+    Graph.visualize(m)
     sources = Graph.find_sources(m, ignore_loops=True)
     m["."] = sorted(list(sources))
     traversal = Graph.postorder_traversal(m, ".")
